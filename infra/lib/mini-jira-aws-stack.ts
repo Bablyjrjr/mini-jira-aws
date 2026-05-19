@@ -17,7 +17,8 @@ export class MiniJiraAwsStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    const vpc = new ec2.Vpc(this, 'MiniJiraVpc', {
+    const vpc = new ec2.Vpc(this, 'TaskflowVpc', {
+      vpcName: 'taskflow-vpc',
       maxAzs: 2,
       natGateways: 1,
       subnetConfiguration: [
@@ -26,7 +27,7 @@ export class MiniJiraAwsStack extends cdk.Stack {
       ],
     });
 
-    const alb = new elbv2.ApplicationLoadBalancer(this, 'MiniJiraAlb', {
+    const alb = new elbv2.ApplicationLoadBalancer(this, 'TaskflowAlb', {
       vpc,
       internetFacing: true,
     });
@@ -47,20 +48,22 @@ export class MiniJiraAwsStack extends cdk.Stack {
     });
 
     const originalBucket = new s3.Bucket(this, 'OriginalBucket', {
+      bucketName: 'taskflow-originals-s3',
       versioned: true,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
       autoDeleteObjects: false,
     });
 
     const resizedBucket = new s3.Bucket(this, 'ResizedBucket', {
+      bucketName: 'taskflow-resized-s3',
       versioned: false,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
       autoDeleteObjects: false,
     });
 
     const tasksTable = new dynamodb.Table(this, 'TasksTable', {
-      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+      tableName: 'taskflow-tasks',
+      partitionKey: { name: 'taskId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
@@ -75,35 +78,69 @@ export class MiniJiraAwsStack extends cdk.Stack {
       sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING },
     });
 
-    new dynamodb.Table(this, 'ProjectsTable', {
-      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+    const projectsTable = new dynamodb.Table(this, 'ProjectsTable', {
+      tableName: 'taskflow-projects',
+      partitionKey: { name: 'projectId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+    projectsTable.addGlobalSecondaryIndex({
+      indexName: 'teamId-index',
+      partitionKey: { name: 'teamId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING },
+    });
+
+    const commentsTable = new dynamodb.Table(this, 'CommentsTable', {
+      tableName: 'taskflow-comments',
+      partitionKey: { name: 'commentId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+    commentsTable.addGlobalSecondaryIndex({
+      indexName: 'taskId-index',
+      partitionKey: { name: 'taskId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING },
+    });
+
+    const usersTable = new dynamodb.Table(this, 'UsersTable', {
+      tableName: 'taskflow-users',
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+    usersTable.addGlobalSecondaryIndex({
+      indexName: 'teamId-index',
+      partitionKey: { name: 'teamId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING },
+    });
+
+    const teamsTable = new dynamodb.Table(this, 'TeamsTable', {
+      tableName: 'taskflow-teams',
+      partitionKey: { name: 'teamId', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
-    new dynamodb.Table(this, 'CommentsTable', {
-      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    const assignmentTopic = new sns.Topic(this, 'TaskAssignmentTopic', {
+      topicName: 'taskflow-notifications',
     });
-
-    new dynamodb.Table(this, 'UsersTable', {
-      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    const assignmentQueue = new sqs.Queue(this, 'TaskAssignmentQueue', {
+      queueName: 'taskflow-assignment-queue',
+      visibilityTimeout: cdk.Duration.seconds(60),
     });
-
-    const assignmentTopic = new sns.Topic(this, 'TaskAssignmentTopic');
-    const assignmentQueue = new sqs.Queue(this, 'TaskAssignmentQueue', { visibilityTimeout: cdk.Duration.seconds(60) });
     assignmentTopic.addSubscription(new sns_subscriptions.SqsSubscription(assignmentQueue));
+
+    const lambdaRole = new iam.Role(this, 'TaskflowLambdaRole', {
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole')],
+      roleName: 'taskflow-lambda-role',
+    });
 
     const resizeLambda = new lambda.Function(this, 'ImageResizeFunction', {
       runtime: lambda.Runtime.NODEJS_18_X,
       handler: 'index.handler',
       code: lambda.Code.fromAsset('lambda/image-resize'),
+      role: lambdaRole,
       environment: {
         RESIZED_BUCKET: resizedBucket.bucketName,
       },
@@ -111,24 +148,36 @@ export class MiniJiraAwsStack extends cdk.Stack {
     originalBucket.grantRead(resizeLambda);
     resizedBucket.grantPut(resizeLambda);
 
+    const activityTable = new dynamodb.Table(this, 'ActivityLogTable', {
+      tableName: 'taskflow-activity-log',
+      partitionKey: { name: 'activityId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
     const assignmentWorker = new lambda.Function(this, 'AssignmentWorkerFunction', {
       runtime: lambda.Runtime.NODEJS_18_X,
       handler: 'index.handler',
       code: lambda.Code.fromAsset('lambda/assignment-worker'),
+      role: lambdaRole,
       environment: {
-        ACTIVITY_TABLE: 'MiniJiraActivityLog',
+        ACTIVITY_TABLE: activityTable.tableName,
       },
     });
     assignmentQueue.grantConsumeMessages(assignmentWorker);
+    activityTable.grantReadWriteData(assignmentWorker);
 
     const digestLambda = new lambda.Function(this, 'DailyDigestFunction', {
       runtime: lambda.Runtime.NODEJS_18_X,
       handler: 'index.handler',
       code: lambda.Code.fromAsset('lambda/daily-digest'),
+      role: lambdaRole,
       environment: {
         TASK_TABLE: tasksTable.tableName,
       },
     });
+
+    tasksTable.grantReadData(digestLambda);
 
     new events.Rule(this, 'DailyDigestRule', {
       schedule: events.Schedule.cron({ minute: '0', hour: '9' }),
@@ -138,6 +187,7 @@ export class MiniJiraAwsStack extends cdk.Stack {
     const role = new iam.Role(this, 'Ec2AppRole', {
       assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
       managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore')],
+      roleName: 'taskflow-ec2-role',
     });
     tasksTable.grantReadWriteData(role);
     originalBucket.grantReadWrite(role);

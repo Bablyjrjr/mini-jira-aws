@@ -70,13 +70,17 @@ The backend uses these environment variables when running locally or in AWS:
 - `COGNITO_ISSUER` - Cognito issuer URL for JWT validation
 - `COGNITO_CLIENT_ID` - Cognito app/client ID
 - `COGNITO_JWKS_URI` - Cognito JWKS endpoint
-- `S3_ORIGINAL_BUCKET` - S3 bucket for uploads (default `mini-jira-originals`)
-- `DDB_USERS_TABLE` - DynamoDB users table name
-- `DDB_TEAMS_TABLE` - DynamoDB teams table name
-- `DDB_PROJECTS_TABLE` - DynamoDB projects table name
-- `DDB_TASKS_TABLE` - DynamoDB tasks table name
-- `DDB_COMMENTS_TABLE` - DynamoDB comments table name
-- `DDB_ACTIVITY_LOG_TABLE` - DynamoDB activity log table name
+- `S3_ORIGINAL_BUCKET` - S3 bucket for uploads (default `taskflow-originals-s3`)
+- `S3_RESIZED_BUCKET` - optional resized image bucket name (default `taskflow-resized-s3`)
+- `DDB_USERS_TABLE` - DynamoDB users table name (default `taskflow-users`)
+- `DDB_TEAMS_TABLE` - DynamoDB teams table name (default `taskflow-teams`)
+- `DDB_PROJECTS_TABLE` - DynamoDB projects table name (default `taskflow-projects`)
+- `DDB_TASKS_TABLE` - DynamoDB tasks table name (default `taskflow-tasks`)
+- `DDB_COMMENTS_TABLE` - DynamoDB comments table name (default `taskflow-comments`)
+- `DDB_ACTIVITY_LOG_TABLE` - DynamoDB activity log table name (default `taskflow-activity-log`)
+- `SNS_ASSIGNMENT_TOPIC_ARN` - SNS topic ARN for assignment notifications
+- `SQS_ASSIGNMENT_QUEUE_URL` - SQS queue URL for assignment messages
+- `SQS_ASSIGNMENT_QUEUE_ARN` - SQS queue ARN for assignment messages
 
 ## Notes
 
