@@ -14,7 +14,8 @@ router.post(
   upload.single('image'),
   asyncHandler(async (req, res) => {
     if (!req.file) {
-      return res.status(400).json({ message: 'Image file is required' });
+      res.status(400).json({ message: 'Image file is required' });
+      return;
     }
 
     const key = `tasks/${Date.now()}_${req.file.originalname}`;
@@ -37,7 +38,8 @@ router.get(
   asyncHandler(async (req, res) => {
     const key = req.query.key as string;
     if (!key) {
-      return res.status(400).json({ message: 'Missing key' });
+       res.status(400).json({ message: 'Missing key' });
+       return;
     }
     const command = new GetObjectCommand({ Bucket: bucket, Key: key });
     const url = await getSignedUrl(s3, command, { expiresIn: 900 });
