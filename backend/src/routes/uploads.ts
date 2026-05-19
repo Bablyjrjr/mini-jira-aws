@@ -7,7 +7,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 const s3 = new S3Client({});
-const bucket = process.env.S3_ORIGINAL_BUCKET || 'mini-jira-originals';
+const bucket = process.env.S3_ORIGINAL_BUCKET || 'taskflow-originals-s3';
 
 router.post(
   '/image',

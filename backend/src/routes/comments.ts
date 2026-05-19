@@ -12,8 +12,6 @@ router.post(
     const user = req.user!;
     const commentId = `comment-${Date.now()}`;
     const item = {
-      pk: `TASK#${req.body.taskId}`,
-      sk: `COMMENT#${commentId}`,
       commentId,
       taskId: req.body.taskId,
       authorId: user.sub,
@@ -33,8 +31,9 @@ router.get(
     const comments = await ddb.send(
       new QueryCommand({
         TableName: TABLES.Comments,
-        KeyConditionExpression: 'pk = :pk',
-        ExpressionAttributeValues: { ':pk': `TASK#${taskId}` },
+        IndexName: 'taskId-index',
+        KeyConditionExpression: 'taskId = :taskId',
+        ExpressionAttributeValues: { ':taskId': taskId },
         ScanIndexForward: true,
       }),
     );

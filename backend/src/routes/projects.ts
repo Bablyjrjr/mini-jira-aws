@@ -11,13 +11,12 @@ router.post(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const user = req.user!;
     if (user.role !== 'Manager' && user.role !== 'Admin') {
-      return res.status(403).json({ message: 'Forbidden' });
+      res.status(403).json({ message: 'Forbidden' });
+      return;
     }
 
     const projectId = `project-${Date.now()}`;
     const item = {
-      pk: `PROJECT#${projectId}`,
-      sk: `PROJECT#${projectId}`,
       projectId,
       name: req.body.name,
       description: req.body.description,
@@ -43,9 +42,10 @@ router.get(
   '/:projectId',
   asyncHandler(async (req, res) => {
     const { projectId } = req.params;
-    const result = await ddb.send(new GetCommand({ TableName: TABLES.Projects, Key: { pk: `PROJECT#${projectId}`, sk: `PROJECT#${projectId}` } }));
+    const result = await ddb.send(new GetCommand({ TableName: TABLES.Projects, Key: { projectId } }));
     if (!result.Item) {
-      return res.status(404).json({ message: 'Project not found' });
+      res.status(404).json({ message: 'Project not found' });
+      return;
     }
     res.json(result.Item);
   }),
@@ -56,7 +56,8 @@ router.put(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const user = req.user!;
     if (user.role !== 'Manager' && user.role !== 'Admin') {
-      return res.status(403).json({ message: 'Forbidden' });
+      res.status(403).json({ message: 'Forbidden' });
+      return;
     }
 
     const { projectId } = req.params;
@@ -78,14 +79,14 @@ router.put(
     await ddb.send(
       new UpdateCommand({
         TableName: TABLES.Projects,
-        Key: { pk: `PROJECT#${projectId}`, sk: `PROJECT#${projectId}` },
+        Key: { projectId },
         UpdateExpression: `SET ${expressionParts.join(', ')}`,
         ExpressionAttributeNames: expressionNames,
         ExpressionAttributeValues: expressionValues,
       }),
     );
 
-    const updated = await ddb.send(new GetCommand({ TableName: TABLES.Projects, Key: { pk: `PROJECT#${projectId}`, sk: `PROJECT#${projectId}` } }));
+    const updated = await ddb.send(new GetCommand({ TableName: TABLES.Projects, Key: { projectId } }));
     res.json(updated.Item);
   }),
 );
@@ -95,11 +96,12 @@ router.delete(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const user = req.user!;
     if (user.role !== 'Manager' && user.role !== 'Admin') {
-      return res.status(403).json({ message: 'Forbidden' });
+      res.status(403).json({ message: 'Forbidden' });
+      return;
     }
 
     const { projectId } = req.params;
-    await ddb.send(new DeleteCommand({ TableName: TABLES.Projects, Key: { pk: `PROJECT#${projectId}`, sk: `PROJECT#${projectId}` } }));
+    await ddb.send(new DeleteCommand({ TableName: TABLES.Projects, Key: { projectId } }));
     res.status(204).send();
   }),
 );

@@ -14,8 +14,6 @@ router.post(
     const taskId = `task-${Date.now()}`;
 
     const item = {
-      pk: `TASK#${taskId}`,
-      sk: `TASK#${taskId}`,
       taskId,
       title: data.title,
       description: data.description,
@@ -43,11 +41,13 @@ router.get(
     const user = req.user!;
     if (user.role === 'Manager' || user.role === 'Admin') {
       const all = await ddb.send(new ScanCommand({ TableName: TABLES.Tasks }));
-      return res.json({ items: all.Items || [] });
+      res.json({ items: all.Items || [] });
+      return;
     }
 
     if (!user.teamId) {
-      return res.status(403).json({ message: 'Team membership required' });
+      res.status(403).json({ message: 'Team membership required' });
+      return;
     }
 
     const result = await ddb.send(
@@ -58,7 +58,8 @@ router.get(
         ExpressionAttributeValues: { ':teamId': user.teamId },
       }),
     );
-    return res.json({ items: result.Items || [] });
+    res.json({ items: result.Items || [] });
+    return;
   }),
 );
 
@@ -66,14 +67,16 @@ router.get(
   '/:taskId',
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const { taskId } = req.params;
-    const result = await ddb.send(new GetCommand({ TableName: TABLES.Tasks, Key: { pk: `TASK#${taskId}`, sk: `TASK#${taskId}` } }));
+    const result = await ddb.send(new GetCommand({ TableName: TABLES.Tasks, Key: { taskId } }));
     const task = result.Item as any;
     if (!task) {
-      return res.status(404).json({ message: 'Task not found' });
+      res.status(404).json({ message: 'Task not found' });
+      return;
     }
 
     if (req.user!.role !== 'Manager' && req.user!.role !== 'Admin' && task.teamId !== req.user!.teamId) {
-      return res.status(403).json({ message: 'Forbidden' });
+      res.status(403).json({ message: 'Forbidden' });
+      return;
     }
 
     res.json(task);
@@ -85,14 +88,16 @@ router.put(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const { taskId } = req.params;
     const updates = req.body;
-    const taskKey = { pk: `TASK#${taskId}`, sk: `TASK#${taskId}` };
+    const taskKey = { taskId };
     const existing = await ddb.send(new GetCommand({ TableName: TABLES.Tasks, Key: taskKey }));
     const task = existing.Item as any;
     if (!task) {
-      return res.status(404).json({ message: 'Task not found' });
+      res.status(404).json({ message: 'Task not found' });
+      return;
     }
     if (req.user!.role !== 'Manager' && req.user!.role !== 'Admin' && task.teamId !== req.user!.teamId) {
-      return res.status(403).json({ message: 'Forbidden' });
+      res.status(403).json({ message: 'Forbidden' });
+      return;
     }
 
     const expressionParts: string[] = [];
@@ -131,14 +136,16 @@ router.delete(
   '/:taskId',
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const { taskId } = req.params;
-    const taskKey = { pk: `TASK#${taskId}`, sk: `TASK#${taskId}` };
+    const taskKey = { taskId };
     const existing = await ddb.send(new GetCommand({ TableName: TABLES.Tasks, Key: taskKey }));
     const task = existing.Item as any;
     if (!task) {
-      return res.status(404).json({ message: 'Task not found' });
+      res.status(404).json({ message: 'Task not found' });
+      return;
     }
     if (req.user!.role !== 'Manager' && req.user!.role !== 'Admin' && task.teamId !== req.user!.teamId) {
-      return res.status(403).json({ message: 'Forbidden' });
+      res.status(403).json({ message: 'Forbidden' });
+      return;
     }
 
     await ddb.send(new DeleteCommand({ TableName: TABLES.Tasks, Key: taskKey }));
