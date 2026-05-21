@@ -2,6 +2,20 @@ import { Request, Response, NextFunction } from 'express';
 import jwt, { JwtHeader, JwtPayload, SigningKeyCallback, VerifyOptions } from 'jsonwebtoken';
 import jwksRsa from 'jwks-rsa';
 
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        sub: string;
+        email: string;
+        role: 'Manager' | 'Employee' | 'Admin';
+        teamId?: string;
+        name?: string;
+      };
+    }
+  }
+}
+
 export interface AuthenticatedRequest extends Request {
   user?: {
     sub: string;

@@ -5,7 +5,7 @@ import tasksRouter from './routes/tasks';
 import projectsRouter from './routes/projects';
 import commentsRouter from './routes/comments';
 import uploadsRouter from './routes/uploads';
-import { authenticateJwt } from './middleware/auth';
+import { authenticateJwt, AuthenticatedRequest } from './middleware/auth';
 
 dotenv.config();
 
@@ -18,7 +18,7 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'mini-jira-backend' });
 });
 
-app.use(authenticateJwt);
+app.use((req, res, next) => authenticateJwt(req as AuthenticatedRequest, res, next));
 app.use('/api/tasks', tasksRouter);
 app.use('/api/projects', projectsRouter);
 app.use('/api/comments', commentsRouter);
