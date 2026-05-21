@@ -2,7 +2,7 @@ import express from 'express';
 import asyncHandler from 'express-async-handler';
 import { ddb, TABLES } from '../aws/dynamo';
 import { AuthenticatedRequest } from '../middleware/auth';
-import { PutCommand, GetCommand, ScanCommand, UpdateCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import { PutCommand, GetCommand, ScanCommand, QueryCommand, UpdateCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
 
 const router = express.Router();
 
@@ -32,8 +32,27 @@ router.post(
 
 router.get(
   '/',
-  asyncHandler(async (_req, res) => {
-    const result = await ddb.send(new ScanCommand({ TableName: TABLES.Projects }));
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const user = req.user!;
+    if (user.role === 'Manager' || user.role === 'Admin') {
+      const result = await ddb.send(new ScanCommand({ TableName: TABLES.Projects }));
+      res.json({ items: result.Items || [] });
+      return;
+    }
+
+    if (!user.teamId) {
+      res.status(403).json({ message: 'Team membership required' });
+      return;
+    }
+
+    const result = await ddb.send(
+      new QueryCommand({
+        TableName: TABLES.Projects,
+        IndexName: 'teamId-index',
+        KeyConditionExpression: 'teamId = :teamId',
+        ExpressionAttributeValues: { ':teamId': user.teamId },
+      }),
+    );
     res.json({ items: result.Items || [] });
   }),
 );

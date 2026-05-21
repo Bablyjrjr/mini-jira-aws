@@ -3,8 +3,12 @@ import asyncHandler from 'express-async-handler';
 import { ddb, TABLES } from '../aws/dynamo';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { PutCommand, GetCommand, DeleteCommand, QueryCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
+import { CloudWatchClient, PutMetricDataCommand } from '@aws-sdk/client-cloudwatch';
 
 const router = express.Router();
+const snsClient = new SNSClient({});
+const cloudWatchClient = new CloudWatchClient({});
 
 router.post(
   '/',
@@ -31,6 +35,32 @@ router.post(
     };
 
     await ddb.send(new PutCommand({ TableName: TABLES.Tasks, Item: item }));
+    await snsClient.send(
+      new PublishCommand({
+        TopicArn: process.env.SNS_ASSIGNMENT_TOPIC_ARN,
+        Subject: `New task assigned: ${item.title}`,
+        Message: JSON.stringify({ taskId, assigneeId: item.assigneeId, teamId: item.teamId }),
+        MessageAttributes: {
+          teamId: {
+            DataType: 'String',
+            StringValue: item.teamId,
+          },
+        },
+      }),
+    );
+    await cloudWatchClient.send(
+      new PutMetricDataCommand({
+        Namespace: 'MiniJira',
+        MetricData: [
+          {
+            MetricName: 'TaskCreated',
+            Dimensions: [{ Name: 'TeamId', Value: item.teamId }],
+            Value: 1,
+            Unit: 'Count',
+          },
+        ],
+      }),
+    );
     res.status(201).json(item);
   }),
 );
@@ -100,9 +130,10 @@ router.put(
       return;
     }
 
+    const now = new Date().toISOString();
     const expressionParts: string[] = [];
     const attributeNames: Record<string, string> = {};
-    const attributeValues: Record<string, any> = { ':updatedAt': new Date().toISOString() };
+    const attributeValues: Record<string, any> = { ':updatedAt': now };
 
     for (const key of ['title', 'description', 'status', 'priority', 'deadline', 'assigneeId', 'teamId', 'projectId', 'imageUrl']) {
       if (updates[key] !== undefined) {
@@ -112,6 +143,20 @@ router.put(
         attributeValues[valueKey] = updates[key];
         expressionParts.push(`${fieldName} = ${valueKey}`);
       }
+    }
+
+    if (updates.status !== undefined) {
+      attributeNames['#audit'] = 'audit';
+      attributeValues[':emptyAudit'] = [];
+      attributeValues[':auditEntry'] = [
+        {
+          from: task.status,
+          to: updates.status,
+          by: req.user!.sub,
+          at: now,
+        },
+      ];
+      expressionParts.push('#audit = list_append(if_not_exists(#audit, :emptyAudit), :auditEntry)');
     }
 
     expressionParts.push('#updatedAt = :updatedAt');
